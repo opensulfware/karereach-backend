@@ -95,4 +95,29 @@ class AuthController extends ApiController
 
         return $this->success(null, 'Logged out successfully', 200, SystemCode::AUTH_LOGOUT_SUCCESS);
     }
+
+    /**
+     * Get the authenticated CHW profile.
+     */
+    public function profile(Request $request): JsonResponse
+    {
+        return $this->success($request->user(), 'Profile retrieved successfully', 200, SystemCode::AUTH_PROFILE_SUCCESS);
+    }
+
+    /**
+     * Refresh the access token.
+     */
+    public function refresh(Request $request): JsonResponse
+    {
+        // Revoke current token
+        $request->user()->currentAccessToken()->delete();
+
+        // Create new token
+        $token = $request->user()->createToken('auth_token')->plainTextToken;
+
+        return $this->success([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+        ], 'Token refreshed successfully', 200, SystemCode::AUTH_TOKEN_REFRESH_SUCCESS);
+    }
 }

@@ -41,7 +41,8 @@ class ConsultationController extends ApiController
             'patient_age' => 'required|integer|min:0',
             'patient_sex' => 'required|in:male,female,other',
             'chief_complaint' => 'required|string',
-            'duration_days' => 'required|integer|min:1',
+            'duration_days' => 'nullable|integer|min:1',
+            'duration' => 'nullable|string', // Support Flutter string format
             'symptoms' => 'required|array',
             'notes' => 'nullable|string',
         ]);
@@ -50,11 +51,17 @@ class ConsultationController extends ApiController
             return $this->error('Validation Error', 422, $validator->errors(), SystemCode::ERR_VALIDATION);
         }
 
+        // Convert duration string to days if provided
+        $durationDays = $request->duration_days;
+        if (!$durationDays && $request->duration) {
+            $durationDays = $this->parseDurationToDays($request->duration);
+        }
+
         $consultation = $request->user()->consultations()->create([
             'patient_age' => $request->patient_age,
             'patient_sex' => $request->patient_sex,
             'chief_complaint' => $request->chief_complaint,
-            'duration_days' => $request->duration_days,
+            'duration_days' => $durationDays ?? 1,
             'symptoms' => $request->symptoms,
             'notes' => $request->notes,
             'status' => 'draft', // Initial status
@@ -120,5 +127,81 @@ class ConsultationController extends ApiController
         }
 
         return $this->success($uploadedImages, 'Images uploaded successfully', 201, SystemCode::IMAGE_UPLOAD_SUCCESS);
+    }
+
+    /**
+     * Sync offline consultations (batch upload).
+     */
+    public function syncOffline(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'consultations' => 'required|array',
+            'consultations.*.patient_age' => 'required|integer|min:0',
+            'consultations.*.patient_sex' => 'required|in:male,female,other',
+            'consultations.*.chief_complaint' => 'required|string',
+            'consultations.*.duration' => 'nullable|string',
+            'consultations.*.symptoms' => 'required|array',
+            'consultations.*.notes' => 'nullable|string',
+            'consultations.*.created_at' => 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error('Validation Error', 422, $validator->errors(), SystemCode::ERR_VALIDATION);
+        }
+
+        $synced = [];
+        $failed = [];
+
+        foreach ($request->consultations as $consultationData) {
+            try {
+                $durationDays = $this->parseDurationToDays($consultationData['duration'] ?? 'Less than 24 hours');
+
+                $consultation = $request->user()->consultations()->create([
+                    'patient_age' => $consultationData['patient_age'],
+                    'patient_sex' => $consultationData['patient_sex'],
+                    'chief_complaint' => $consultationData['chief_complaint'],
+                    'duration_days' => $durationDays,
+                    'symptoms' => $consultationData['symptoms'],
+                    'notes' => $consultationData['notes'] ?? null,
+                    'status' => 'draft',
+                    'created_at' => $consultationData['created_at'] ?? now(),
+                ]);
+
+                $synced[] = new ConsultationResource($consultation);
+            } catch (\Exception $e) {
+                $failed[] = [
+                    'data' => $consultationData,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $this->success([
+            'synced' => $synced,
+            'failed' => $failed,
+            'synced_count' => count($synced),
+            'failed_count' => count($failed),
+        ], 'Sync completed', 200, SystemCode::CONSULTATION_SYNC_SUCCESS);
+    }
+
+    /**
+     * Parse duration string to days.
+     */
+    private function parseDurationToDays(string $duration): int
+    {
+        $duration = strtolower($duration);
+
+        if (str_contains($duration, 'less than 24') || str_contains($duration, '< 24')) {
+            return 1;
+        } elseif (str_contains($duration, '1-3 days') || str_contains($duration, '1 to 3')) {
+            return 2;
+        } elseif (str_contains($duration, '4-7 days') || str_contains($duration, '4 to 7')) {
+            return 5;
+        } elseif (str_contains($duration, 'more than 1 week') || str_contains($duration, '> 1 week')) {
+            return 10;
+        }
+
+        // Default fallback
+        return 1;
     }
 }

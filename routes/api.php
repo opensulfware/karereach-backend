@@ -19,6 +19,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
         Route::middleware('auth:sanctum')->group(function () {
+            Route::get('/profile', [AuthController::class, 'profile']);
+            Route::post('/refresh', [AuthController::class, 'refresh']);
             Route::post('/logout', [AuthController::class, 'logout']);
         });
     });
@@ -27,6 +29,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/consultations', [ConsultationController::class, 'index']);
         Route::post('/consultations', [ConsultationController::class, 'store']);
+        Route::post('/consultations/sync', [ConsultationController::class, 'syncOffline']);
         Route::get('/consultations/{id}', [ConsultationController::class, 'show']);
         Route::post('/consultations/{id}/images', [ConsultationController::class, 'uploadImages']);
 

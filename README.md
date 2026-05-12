@@ -70,6 +70,13 @@ database/                   # Migrations and clinical seeders
    composer run dev
    ```
 
+   Or run manually with network access (required for physical devices):
+   ```bash
+   php artisan serve --host=0.0.0.0 --port=8000
+   ```
+
+   > Use `--host=0.0.0.0` when testing with a physical device on the same network. Find your machine's IP with `ip addr show` and set it as the base URL in the Flutter app.
+
 ## 📚 API Overview
 
 | Endpoint | Method | Description |
